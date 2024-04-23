@@ -82,6 +82,26 @@ function clean() {
     rm -rf /usr/bin/kmesh-stop-post.sh
 }
 
+function copy_to_host() {
+    local arch="amd64"
+    if [ ! -d "./out" ]; then
+        mkdir out
+    fi
+    if [ ! -d "./out/$arch" ]; then
+        mkdir "./out/$arch"
+    fi
+    
+    cp /usr/lib64/libkmesh_api_v2_c.so out/$arch
+    cp /usr/lib64/libkmesh_deserial.so out/$arch
+    cp /usr/lib64/libboundscheck.so out/$arch
+    find /usr/lib64 -name 'libbpf.so*' -exec cp {} out/$arch \;
+    find /usr/lib64 -name 'libprotobuf-c.so*' -exec cp {} out/$arch \;
+    cp /usr/bin/kmesh-daemon out/$arch
+    cp /usr/bin/kmesh-cmd out/$arch
+    cp /usr/bin/kmesh-cni out/$arch
+    cp /usr/bin/mdacore out/$arch
+}
+
 set_enhanced_kernel_env
 
 if [ "$1" == "-h"  -o  "$1" == "--help" ]; then
@@ -102,6 +122,7 @@ fi
 if [ "$1" == "-i"  -o  "$1" == "--install" ]; then
     make install
     install
+    copy_to_host
     exit
 fi
 

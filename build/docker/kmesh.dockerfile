@@ -14,4 +14,10 @@ ADD out/$arch/kmesh-cmd /usr/bin/
 ADD out/$arch/mdacore /usr/bin/
 ADD build/docker/start_kmesh.sh /kmesh
 
-RUN yum install -y kmod util-linux
+# RUN yum install -y kmod util-linux
+
+RUN mkdir /rpms
+
+COPY rpms/*.rpm /rpms/
+
+RUN rpm -Uvh /rpms/*.rpm

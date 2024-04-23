@@ -5,7 +5,7 @@ deploy:
       meshController: istiod.istio-system.svc:15012
     image:
       repository: ghcr.io/kmesh-net/kmesh
-      tag: 0.2.0
+      tag: local
     imagePullPolicy: IfNotPresent
     resources:
       limits:

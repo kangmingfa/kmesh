@@ -31,6 +31,7 @@ include ./mk/bpf.print.mk
 # compiler flags
 GOFLAGS := $(EXTRA_GOFLAGS)
 ARCH := $(shell uname -m)
+IMAGE := ghcr.io/kmesh-net/kmesh:local
 
 ifeq ($(ARCH),x86_64)
 	DIR := amd64
@@ -123,7 +124,9 @@ build:
 	./kmesh_compile.sh
 	
 docker:
-	make build
+	# make build
+	./build.sh -b
+	./build.sh -i
 	docker build --build-arg arch=$(DIR) -f build/docker/kmesh.dockerfile -t $(IMAGE) .
 
 clean:
