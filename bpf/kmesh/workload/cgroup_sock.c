@@ -60,7 +60,7 @@ static inline int sock4_traffic_control(struct bpf_sock_addr *ctx)
 
 	DECLARE_VAR_ADDRESS(ctx, address);
 
-	BPF_LOG(DEBUG, KMESH, "origin addr=[%u:%u]\n", ctx->user_ip4, ctx->user_port);
+	BPF_LOG(DEBUG, KMESH, "origin addr=[%x:%x]\n", bpf_ntohl(ctx->user_ip4), bpf_ntohs(ctx->user_port));
 	frontend_v = map_lookup_frontend(&address);
 	if (!frontend_v) {
 		address.service_port = 0;
@@ -71,7 +71,7 @@ static inline int sock4_traffic_control(struct bpf_sock_addr *ctx)
 		direct_backend = true;
 	}
 
-	BPF_LOG(DEBUG, KMESH, "bpf find frontend addr=[%u:%u]\n", ctx->user_ip4, ctx->user_port);
+	BPF_LOG(DEBUG, KMESH, "bpf find frontend addr=[%x:%x]\n", bpf_ntohl(ctx->user_ip4), bpf_ntohs(ctx->user_port));
 
 	if (direct_backend) {
 		backend_key backend_k = {0};
@@ -83,7 +83,7 @@ static inline int sock4_traffic_control(struct bpf_sock_addr *ctx)
 			BPF_LOG(ERR, KMESH, "find backend failed\n");
 			return -ENOENT;
 		}
-		BPF_LOG(DEBUG, KMESH, "find pod frontend\n");
+		BPF_LOG(DEBUG, KMESH, "find pod frontend, would direct access a pod\n");
 		ret = backend_manager(ctx, backend_v);
 		if (ret < 0) {
 			if (ret != -ENOENT)

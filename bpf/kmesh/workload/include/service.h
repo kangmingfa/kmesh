@@ -41,7 +41,7 @@ static inline int lb_random_handle(ctx_buff_t *ctx, int service_id, service_valu
 		BPF_LOG(WARN, SERVICE, "find endpoint failed");
 		return -ENOENT;
 	}
-
+	BPF_LOG(DEBUG, SERVICE, "lb select backend_uid:%x\n", endpoint_v->backend_uid);
 	ret = endpoint_manager(ctx, endpoint_v);
 	if (ret != 0) {
 		if (ret != -ENOENT)

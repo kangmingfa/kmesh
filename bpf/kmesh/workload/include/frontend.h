@@ -39,7 +39,7 @@ static inline int frontend_manager(ctx_buff_t *ctx, frontend_value *frontend_v)
 		BPF_LOG(WARN, FRONTEND, "find service failed\n");
 		return -ENOENT;
 	}
-
+	BPF_LOG(DEBUG, FRONTEND, "bpf find service frontend, would access through service id:%x\n",frontend_v->upstream_id);
 	ret = service_manager(ctx, frontend_v->upstream_id, service_v);
 	if (ret != 0) {
 		if (ret != -ENOENT)
