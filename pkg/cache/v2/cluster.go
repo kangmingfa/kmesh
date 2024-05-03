@@ -27,6 +27,7 @@ import (
 	cluster_v2 "kmesh.net/kmesh/api/v2/cluster"
 	core_v2 "kmesh.net/kmesh/api/v2/core"
 	maps_v2 "kmesh.net/kmesh/pkg/cache/v2/maps"
+	// "kmesh.net/kmesh/pkg/maglev"
 )
 
 type ClusterCache struct {
@@ -111,6 +112,7 @@ func (cache *ClusterCache) Flush() {
 	for name, cluster := range cache.apiClusterCache {
 		switch cluster.GetApiStatus() {
 		case core_v2.ApiStatus_UPDATE:
+			// maglev.CreateLB(cluster)
 			err = maps_v2.ClusterUpdate(name, cluster)
 			if err == nil {
 				// reset api status after successfully updated

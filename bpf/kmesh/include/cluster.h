@@ -27,6 +27,7 @@
 #include "endpoint/endpoint.pb-c.h"
 
 #define CLUSTER_NAME_MAX_LEN	BPF_DATA_MAX_LEN
+#define TABLE_SIZE    16381
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -35,6 +36,22 @@ struct {
 	__uint(map_flags, BPF_F_NO_PREALLOC);
 	__uint(max_entries, MAP_SIZE_OF_CLUSTER);
 } map_of_cluster SEC(".maps");
+
+struct inner_of_maglev {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
+	__uint(key_size, sizeof(__u32));
+	__uint(value_size, sizeof(__u32) * TABLE_SIZE)
+};
+
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);
+	__uint(key_size, CLUSTER_NAME_MAX_LEN);
+	__uint(value_size, sizeof(__u32));
+	__uint(max_entries, MAP_SIZE_OF_CLUSTER);
+	__uint(map_flags, BPF_F_NO_PREALLOC);
+	__array(values, struct inner_of_maglev);
+}outer_of_maglev SEC(".maps");
 
 struct cluster_endpoints {
 	__u32 ep_num;
