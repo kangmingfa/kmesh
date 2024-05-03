@@ -27,7 +27,8 @@
 #include "endpoint/endpoint.pb-c.h"
 
 #define CLUSTER_NAME_MAX_LEN	BPF_DATA_MAX_LEN
-#define TABLE_SIZE    16381
+#define MAGLEV_TABLE_SIZE       16381
+#define HASH_INIT4_SEED         0xcafe
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -41,7 +42,7 @@ struct inner_of_maglev {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__uint(max_entries, 1);
 	__uint(key_size, sizeof(__u32));
-	__uint(value_size, sizeof(__u32) * TABLE_SIZE)
+	__uint(value_size, sizeof(__u32) * MAGLEV_TABLE_SIZE)
 };
 
 struct {
@@ -94,6 +95,11 @@ static inline Cluster__Cluster *map_lookup_cluster(const char *cluster_name)
 static inline struct cluster_endpoints *map_lookup_cluster_eps(const char *cluster_name)
 {
 	return kmesh_map_lookup_elem(&map_of_cluster_eps, cluster_name);
+}
+
+static inline void *map_lookup_cluster_inner_map(const char *cluster_name)
+{
+	return kmesh_map_lookup_elem(&outer_of_maglev, cluster_name);
 }
 
 static inline int map_add_cluster_eps(const char *cluster_name, const struct cluster_endpoints *eps)
@@ -251,6 +257,42 @@ static inline void *loadbalance_round_robin(struct cluster_endpoints *eps)
 
 	__sync_fetch_and_add(&eps->last_round_robin_idx, 1);
 	return (void *)eps->ep_identity[idx];
+}
+
+/* The daddr is explicitly excluded from the hash here in order to allow for
+ * backend selection to choose the same backend even on different service VIPs.
+ */
+static __always_inline __u32 hash_from_tuple_v4(ctx_buff_t *ctx)
+{
+	struct bpf_sock * sk = ctx->sk;
+	return jhash_3words(sk->src_ip4,
+			    ((__u32) sk->dst_port << 16) | sk->src_port,
+			    sk->protocol, HASH_INIT4_SEED);
+}
+
+static inline void *loadbalance_maglev(struct cluster_endpoints *eps, const char* name,ctx_buff_t *ctx) 
+{
+	if (!eps || eps->ep_num == 0)
+		return NULL;
+	
+	__u32 inner_key = 0;
+	__u32 *backend_ids;
+	void *inner_of_maglev;
+	
+	
+	inner_of_maglev = map_lookup_cluster_inner_map(name);
+	if (!inner_of_maglev) {
+		return NULL;
+	}
+
+	backend_ids = bpf_map_lookup_elem(inner_of_maglev, &inner_key);
+	if (!backend_ids) {
+		return NULL;
+	}
+
+	index = hash_from_tuple_v4(ctx) % MAGLEV_TABLE_SIZE;
+
+	return NULL;
 }
 
 static inline void *cluster_get_ep_identity_by_lb_policy(struct cluster_endpoints *eps, __u32 lb_policy)

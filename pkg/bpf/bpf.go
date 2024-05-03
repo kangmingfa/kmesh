@@ -28,6 +28,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 
 	"kmesh.net/kmesh/pkg/logger"
+	"kmesh.net/kmesh/pkg/maglev"
 )
 
 var log = logger.NewLoggerField("pkg/bpf")
@@ -65,6 +66,11 @@ func StartKmesh() error {
 	if err = Obj.Kmesh.ApiEnvCfg(); err != nil {
 		Stop()
 		return fmt.Errorf("api env config failed, %s", err)
+	}
+
+	if err = maglev.InitMaglevMap(); err != nil {
+		Stop()
+		return fmt.Errorf("lb maglev init failed, %s", err)
 	}
 
 	return nil

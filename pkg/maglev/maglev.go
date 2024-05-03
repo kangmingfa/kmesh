@@ -44,7 +44,7 @@ func InitMaglevMap() error {
 	maglevTableSize = DefaultTableSize
 
 	opt := &ebpf.LoadPinOptions{}
-	outer_map,err := ebpf.LoadPinnedMap("/sys/fs/bpf/"+MaglevOuterMapName, opt)
+	outer_map,err := ebpf.LoadPinnedMap("/sys/fs/bpf"+"/bpf_kmesh/map/"+MaglevOuterMapName, opt)
 	if err != nil {
 		return fmt.Errorf("load outer map of maglev failed err: %v", err)
 	}
@@ -73,6 +73,9 @@ func CreateLB(cluster *cluster_v2.Cluster) error{
 	clusterName := cluster.GetName()
 	localityLbEps := loadAssignment.GetEndpoints()
 
+	if len(localityLbEps) == 0 {
+		return fmt.Errorf("current cluster:%v has no any lb endpoints",clusterName)
+	}
 	
 	//yet not consider weight
 	for _,localityLbEp := range localityLbEps {
@@ -141,8 +144,8 @@ func updateMaglevTable(backendIDs []uint32, clusterName string) error {
 		return fmt.Errorf("updating backends of cluster %v : %w",clusterName, err)
 	}
 
-	if len(clusterName) > 192 {
-		clusterName = clusterName[:192]
+	if len(clusterName) > ClusterNameMaxLen {
+		clusterName = clusterName[:ClusterNameMaxLen]
 	}
 	var maglevKey [ClusterNameMaxLen]byte
 	copy(maglevKey[:], []byte(clusterName))
@@ -150,7 +153,6 @@ func updateMaglevTable(backendIDs []uint32, clusterName string) error {
 	if err := outer.Update(maglevKey, uint32(inner.FD()), 0); err != nil {
 		return fmt.Errorf("updating cluster %v: %w",clusterName, err)
 	}
-	// bpf.Obj.Kmesh.SockConn.OuterOfMaglev.Update()
 	return nil
 }
 

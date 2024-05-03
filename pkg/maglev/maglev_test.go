@@ -22,7 +22,7 @@ type MaglevTestSuite struct{
 }
 
 func (suite *MaglevTestSuite) SetupSuite()  {
-	dummyInnerMapSpec := newMaglevInnerMapSpec(uint32(DefaultTableSize))
+	dummyInnerMapSpec := newMaglevInnerMapSpecTest(uint32(DefaultTableSize))
 	_, err := NewMaglevOuterMap(MaglevOuterMapName, MaglevMapMaxEntries, uint32(DefaultTableSize), dummyInnerMapSpec)
 	if err != nil {
 		fmt.Printf("NewMaglevOuterMap err: %v\n",err)
@@ -77,9 +77,9 @@ func (suite *MaglevTestSuite) TestCreateLB() {
 }
 
 // newMaglevInnerMapSpec returns the spec for a maglev inner map.
-func newMaglevInnerMapSpec(tableSize uint32) *ebpf.MapSpec {
+func newMaglevInnerMapSpecTest(tableSize uint32) *ebpf.MapSpec {
 	return &ebpf.MapSpec{
-		Name:       "cilium_maglev_inner",
+		Name:       MaglevInnerMapName,
 		Type:       ebpf.Array,
 		KeySize:    uint32(unsafe.Sizeof(uint32(0))),
 		ValueSize:  uint32(unsafe.Sizeof(uint32(0))) * tableSize,
