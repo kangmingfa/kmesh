@@ -129,7 +129,7 @@ func createMaglevInnerMap(tableSize uint32) (*ebpf.Map, error) {
 }
 
 func updateMaglevTable(backendIDs []uint32, clusterName string) error {
-	log.Debugln("updateMaglevTable...")
+	log.Debugf("updateMaglevTable... of cluster:%v",clusterName)
 	if outer == nil {
 		return errors.New("outer maglev maps not yet initialized")
 	}
