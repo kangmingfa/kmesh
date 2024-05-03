@@ -16,7 +16,7 @@ import (
 const (
 	DefaultTableSize uint64 = 16381
 	DefaultHashSeed = "JLfvgnHc2kaSUFaI"
-	MaglevOuterMapName = "map_of_maglev"
+	MaglevOuterMapName = "outer_of_maglev"
 	MaglevInnerMapName = "inner_of_maglev"
 	MaglevMapMaxEntries = 65536
 	ClusterNameMaxLen = 192
@@ -44,7 +44,7 @@ func InitMaglevMap() error {
 	maglevTableSize = DefaultTableSize
 
 	opt := &ebpf.LoadPinOptions{}
-	outer_map,err := ebpf.LoadPinnedMap(MaglevOuterMapName, opt)
+	outer_map,err := ebpf.LoadPinnedMap("/sys/fs/bpf/"+MaglevOuterMapName, opt)
 	if err != nil {
 		return fmt.Errorf("load outer map of maglev failed err: %v", err)
 	}
@@ -141,7 +141,13 @@ func updateMaglevTable(backendIDs []uint32, clusterName string) error {
 		return fmt.Errorf("updating backends of cluster %v : %w",clusterName, err)
 	}
 
-	if err := outer.Update(clusterName, uint32(inner.FD()), 0); err != nil {
+	if len(clusterName) > 192 {
+		clusterName = clusterName[:192]
+	}
+	var maglevKey [ClusterNameMaxLen]byte
+	copy(maglevKey[:], []byte(clusterName))
+
+	if err := outer.Update(maglevKey, uint32(inner.FD()), 0); err != nil {
 		return fmt.Errorf("updating cluster %v: %w",clusterName, err)
 	}
 	// bpf.Obj.Kmesh.SockConn.OuterOfMaglev.Update()
