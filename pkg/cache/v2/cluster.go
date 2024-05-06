@@ -113,8 +113,10 @@ func (cache *ClusterCache) Flush() {
 		switch cluster.GetApiStatus() {
 		case core_v2.ApiStatus_UPDATE:
 			err = maps_v2.ClusterUpdate(name, cluster)
-			if err := maglev.CreateLB(cluster);err != nil {
-				log.Errorf("maglev lb update %v cluster failed: %v",name, err)
+			if cluster.GetLbPolicy() == cluster_v2.Cluster_MAGLEV {
+				if err := maglev.CreateLB(cluster);err != nil {
+					log.Errorf("maglev lb update %v cluster failed: %v",name, err)
+				}
 			}
 			if err == nil {
 				// reset api status after successfully updated

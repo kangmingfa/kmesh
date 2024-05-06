@@ -263,17 +263,42 @@ static inline void *loadbalance_round_robin(struct cluster_endpoints *eps)
 /* The daddr is explicitly excluded from the hash here in order to allow for
  * backend selection to choose the same backend even on different service VIPs.
  */
-static __always_inline __u32 hash_from_tuple_v4(struct bpf_sock * sk)
-{
+// static __always_inline __u32 hash_from_tuple_v4(struct bpf_sock * sk)
+// {
 	
-	BPF_LOG(INFO, CLUSTER, "sk: src_ip is:%x, src_port is:%d\n", sk->src_ip4,sk->src_port);
-	BPF_LOG(INFO, CLUSTER, "sk: dst_port is:%d, sk->protocol is: %x\n",sk->dst_port,sk->protocol);
-	return jhash_3words(sk->src_ip4,
-			    ((__u32) sk->dst_port << 16) | sk->src_port,
-			    sk->protocol, HASH_INIT4_SEED);
+// 	BPF_LOG(INFO, CLUSTER, "sk: src_ip is:%x, src_port is:%d\n", sk->src_ip4,sk->src_port);
+// 	BPF_LOG(INFO, CLUSTER, "sk: dst_port is:%d, sk->protocol is: %x\n",sk->dst_port,sk->protocol);
+// 	return jhash_3words(sk->src_ip4,
+// 			    ((__u32) sk->dst_port << 16) | sk->src_port,
+// 			    sk->protocol, HASH_INIT4_SEED);
+// }
+
+static __always_inline __u32
+map_array_get_32(__u32 *array, __u32 index, const __u32 limit)
+{
+	__u32 datum = 0;
+
+	// if (__builtin_constant_p(index) ||
+	//     !__builtin_constant_p(limit))
+	// 	__throw_build_bug();
+
+	/* LLVM tends to optimize code away that is needed for the verifier to
+	 * understand dynamic map access. Input constraint is that index < limit
+	 * for this util function, so we never fail here, and returned datum is
+	 * always valid.
+	 */
+	asm volatile("%[index] <<= 2\n\t"
+		     "if %[index] > %[limit] goto +1\n\t"
+		     "%[array] += %[index]\n\t"
+		     "%[datum] = *(u32 *)(%[array] + 0)\n\t"
+		     : [datum]"=r"(datum)
+		     : [limit]"i"(limit), [array]"r"(array), [index]"r"(index)
+		     : /* no clobbers */ );
+
+	return datum;
 }
 
-static inline void *loadbalance_maglev(struct cluster_endpoints *eps, char* name,ctx_buff_t *ctx) 
+static inline void *loadbalance_maglev_select_backend(struct cluster_endpoints *eps, char* name,ctx_buff_t *ctx) 
 {
 	if (!eps || eps->ep_num == 0)
 		return NULL;
@@ -285,7 +310,6 @@ static inline void *loadbalance_maglev(struct cluster_endpoints *eps, char* name
 	__u32 *inner_of_maglev;
 	struct bpf_sock_ops *skops;
 
-	
 	inner_of_maglev = map_lookup_cluster_inner_map(name);
 	if (!inner_of_maglev) {
 		return NULL;
@@ -294,42 +318,15 @@ static inline void *loadbalance_maglev(struct cluster_endpoints *eps, char* name
 	if (!backend_ids) {
 		return NULL;
 	}
-
-	BPF_LOG(INFO, CLUSTER, "loadbalance_maglev 3\n");
-	skops = (struct bpf_sock_ops*)ctx;
-	if (!skops) {
-		return NULL;
-	}
-	BPF_LOG(INFO, CLUSTER, "sk: src_ip is:%x, src_port is:%d\n", skops->local_ip4,skops->local_port);
-
-	struct bpf_sock * sk = ctx->sk;
-	if (!sk) {
-		return NULL;
-	}
-	BPF_LOG(INFO, CLUSTER, "loadbalance_maglev 4\n");
-	index = hash_from_tuple_v4(sk) % MAGLEV_TABLE_SIZE;
+	index = bpf_get_prandom_u32() % MAGLEV_TABLE_SIZE;
 	if (index >= MAGLEV_TABLE_SIZE)
 		return NULL;
-	
-	BPF_LOG(INFO, CLUSTER, "loadbalance_maglev 5, index is:%u\n", index);
-	id = backend_ids[0];
+	id = map_array_get_32(backend_ids, index, MAGLEV_TABLE_SIZE);
+	BPF_LOG(INFO, CLUSTER, "lb_policy is maglev, select backend id is:%u\n", id);
+	if (id >= KMESH_PER_ENDPOINT_NUM)
+		return NULL;
 
-	BPF_LOG(INFO, CLUSTER, "maglev lb find backend id: %d\n", id);
-
-	id = backend_ids[1];
-
-	BPF_LOG(INFO, CLUSTER, "maglev lb find backend id: %d\n", id);
-
-	id = backend_ids[2];
-
-	BPF_LOG(INFO, CLUSTER, "maglev lb find backend id: %d\n", id);
-
-	id = backend_ids[3];
-
-	BPF_LOG(INFO, CLUSTER, "maglev lb find backend id: %d\n", id);
-
-
-	return NULL;
+	return (void *)eps->ep_identity[id];
 }
 
 static inline void *cluster_get_ep_identity_by_lb_policy(struct cluster_endpoints *eps, __u32 lb_policy, char* name,ctx_buff_t *ctx)
@@ -340,12 +337,14 @@ static inline void *cluster_get_ep_identity_by_lb_policy(struct cluster_endpoint
 		case CLUSTER__CLUSTER__LB_POLICY__ROUND_ROBIN:
 			ep_identity = loadbalance_round_robin(eps);
 			break;
+		case CLUSTER__CLUSTER__LB_POLICY__MAGLEV:
+			ep_identity = loadbalance_maglev_select_backend(eps, name, ctx);
+			break;
 		default:
 			BPF_LOG(INFO, CLUSTER, "%d lb_policy is unsupport, defaut:ROUND_ROBIN\n", lb_policy);
 			ep_identity = loadbalance_round_robin(eps);
 			break;
 	}
-	loadbalance_maglev(eps,name,ctx);
 	return ep_identity;
 }
 

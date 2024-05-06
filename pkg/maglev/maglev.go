@@ -68,41 +68,17 @@ func CreateLB(cluster *cluster_v2.Cluster) error{
 		return errors.New("cluster is nil")
 	}
 
-	flatEps := make([]*endpoint.Endpoint,0)
-	loadAssignment := cluster.GetLoadAssignment()
 	clusterName := cluster.GetName()
-	localityLbEps := loadAssignment.GetEndpoints()
-
-	if len(localityLbEps) == 0 {
-		return fmt.Errorf("current cluster:%v has no any lb endpoints",clusterName)
+	table, err := getLookupTable(cluster, maglevTableSize)
+	if err != nil {
+		return err
 	}
-	
-	//yet not consider weight
-	for _,localityLbEp := range localityLbEps {
-		eps := localityLbEp.GetLbEndpoints()
-		flatEps = append(flatEps, eps...)
-	}
-	backends := make([]Backend, 0,len(flatEps))
-
-	for i, ep := range flatEps {
-		epOffset,epSkip := getOffsetAndSkip(ep.GetAddress().String(),maglevTableSize)
-		b := Backend{
-			ep: ep,
-			index: i,
-			offset: epOffset,
-			skip: epSkip,
-			next: 0,
-		}
-		backends = append(backends, b)
-	}
-
-	table := getLookupTable(backends, maglevTableSize)
 	backendIDs := make([]uint32,maglevTableSize)
 	for i,id := range table {
 		backendIDs[i] = uint32(id)
 	}
 
-	err := updateMaglevTable(backendIDs,clusterName);
+	err = updateMaglevTable(backendIDs,clusterName);
 	if err != nil {
 		return fmt.Errorf("updateMaglevTable fail err:%v", err)
 	}
@@ -168,9 +144,39 @@ func getPermutation(b Backend) uint64 {
 	return (b.offset + (b.skip * b.next)) % maglevTableSize
 }
 
-func getLookupTable(backends []Backend, tableSize uint64) []int{
+func getLookupTable(cluster *cluster_v2.Cluster, tableSize uint64) ([]int, error){
+
+	loadAssignment := cluster.GetLoadAssignment()
+	clusterName := cluster.GetName()
+	localityLbEps := loadAssignment.GetEndpoints()
+
+	if len(localityLbEps) == 0 {
+		return nil, fmt.Errorf("current cluster:%v has no any lb endpoints",clusterName)
+	}
+
+	flatEps := make([]*endpoint.Endpoint,0)
+
+	//yet not consider weight
+	for _,localityLbEp := range localityLbEps {
+		eps := localityLbEp.GetLbEndpoints()
+		flatEps = append(flatEps, eps...)
+	}
+	backends := make([]Backend, 0,len(flatEps))
+
+	for i, ep := range flatEps {
+		epOffset,epSkip := getOffsetAndSkip(ep.GetAddress().String(),maglevTableSize)
+		b := Backend{
+			ep: ep,
+			index: i,
+			offset: epOffset,
+			skip: epSkip,
+			next: 0,
+		}
+		backends = append(backends, b)
+	}
+
 	if (len(backends) == 0) {
-		return nil
+		return nil, fmt.Errorf("current cluster:%v has no any lb backends",clusterName)
 	}
 	
 	length := len(backends)
@@ -195,5 +201,5 @@ func getLookupTable(backends []Backend, tableSize uint64) []int{
 		}
 	}
 
-	return lookUpTable
+	return lookUpTable, nil
 }

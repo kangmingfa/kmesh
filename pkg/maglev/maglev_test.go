@@ -2,6 +2,7 @@ package maglev
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"unsafe"
 
@@ -18,12 +19,27 @@ func TestMaglevTestSuite(t *testing.T)  {
 }
 
 type MaglevTestSuite struct{
+	mapPath string
 	suite.Suite
 }
 
 func (suite *MaglevTestSuite) SetupSuite()  {
+	mapPath := "/sys/fs/bpf/bpf_kmesh/map/"
+	suite.mapPath = mapPath
+	_, err := os.Stat(mapPath)
+	if os.IsNotExist(err) {
+		err := os.MkdirAll(mapPath,0755)
+		if err != nil {
+			fmt.Println("can not mkdir bpf map path", err)
+		}
+	}else if err != nil {
+        fmt.Println("other err:", err)
+        return
+    } else {
+        fmt.Println("bpf map path already exist ",  mapPath)
+    }
 	dummyInnerMapSpec := newMaglevInnerMapSpecTest(uint32(DefaultTableSize))
-	_, err := NewMaglevOuterMap(MaglevOuterMapName, MaglevMapMaxEntries, uint32(DefaultTableSize), dummyInnerMapSpec)
+	_, err = NewMaglevOuterMap(MaglevOuterMapName, MaglevMapMaxEntries, uint32(DefaultTableSize), dummyInnerMapSpec,mapPath)
 	if err != nil {
 		fmt.Printf("NewMaglevOuterMap err: %v\n",err)
 	}
@@ -36,6 +52,53 @@ func (suite *MaglevTestSuite) TearDownSuite()  {
 }
 
 func (suite *MaglevTestSuite) TestCreateLB() {
+	cluster := newCluster()
+	clusterName := cluster.GetName()
+
+	err := CreateLB(cluster)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	var inner_fd uint32
+	var maglevKey [ClusterNameMaxLen]byte
+	
+	copy(maglevKey[:], []byte(clusterName))
+	opt := &ebpf.LoadPinOptions{}
+	outer_map,err := ebpf.LoadPinnedMap(suite.mapPath + MaglevOuterMapName, opt)
+	if err != nil {
+		fmt.Printf("LoadPinnedMap err: %v \n",err)
+	}
+	err = outer_map.Lookup(maglevKey,&inner_fd);
+	if err != nil {
+		fmt.Printf("Lookup with key %v , err %v \n",clusterName,err)
+	}
+	fmt.Println("inner fd: ", inner_fd)
+	
+}
+
+func (suite *MaglevTestSuite) TestGetLookupTable() {
+	cluster := newCluster()
+	
+	table, err := getLookupTable(cluster, DefaultTableSize)
+	if err != nil {
+		fmt.Printf("getLookupTable err:%v \n",err)
+	}
+	backendCount := make(map[int]int)
+	// print backend id distribute
+	for i:=0;i < len(table);i++ {
+		fmt.Printf(" %v",table[i])
+		backendCount[table[i]]++
+	}
+	fmt.Println()
+	for k,v := range backendCount {
+		fmt.Printf("\n backend_id:%v, count:%v\n",k,v)
+	}
+
+}
+
+func newCluster() *cluster_v2.Cluster {
+	var clusterName string = "outbound|5000||helloworld.default.svc.cluster.local"
 	lbEndpoints := make([]*endpoint.Endpoint, 0)
 	lbEndpoints = append(lbEndpoints, &endpoint.Endpoint{
 		Address: &core.SocketAddress{
@@ -54,7 +117,14 @@ func (suite *MaglevTestSuite) TestCreateLB() {
 	lbEndpoints = append(lbEndpoints, &endpoint.Endpoint{
 		Address: &core.SocketAddress{
 			Protocol: 0,
-			Port: 1,
+			Port: 2,
+			Ipv4: 4369,
+		},
+	})
+	lbEndpoints = append(lbEndpoints, &endpoint.Endpoint{
+		Address: &core.SocketAddress{
+			Protocol: 0,
+			Port: 3,
 			Ipv4: 4369,
 		},
 	})
@@ -64,16 +134,14 @@ func (suite *MaglevTestSuite) TestCreateLB() {
 	}
 	localityLbEndpoints = append(localityLbEndpoints, llbep)
 	cluster := &cluster_v2.Cluster{
-		Name: "cluser2",
+		LbPolicy: cluster_v2.Cluster_MAGLEV,
+		Name: clusterName,
 		LoadAssignment: &endpoint.ClusterLoadAssignment{
-			ClusterName: "cluster2",
+			ClusterName: clusterName,
 			Endpoints: localityLbEndpoints,
 		},
 	}
-	err := CreateLB(cluster)
-	if err != nil {
-		fmt.Println(err)
-	}
+	return cluster
 }
 
 // newMaglevInnerMapSpec returns the spec for a maglev inner map.
@@ -88,7 +156,7 @@ func newMaglevInnerMapSpecTest(tableSize uint32) *ebpf.MapSpec {
 }
 
 // NewMaglevOuterMap returns a new object representing a maglev outer map.
-func NewMaglevOuterMap(name string, maxEntries int, tableSize uint32, innerMap *ebpf.MapSpec) (*ebpf.Map, error) {
+func NewMaglevOuterMap(name string, maxEntries int, tableSize uint32, innerMap *ebpf.MapSpec, pinPath string) (*ebpf.Map, error) {
 	m ,err := ebpf.NewMapWithOptions(&ebpf.MapSpec{
 		Name:       name,
 		Type:       ebpf.HashOfMaps,
@@ -98,7 +166,7 @@ func NewMaglevOuterMap(name string, maxEntries int, tableSize uint32, innerMap *
 		InnerMap:   innerMap,
 		Pinning:    ebpf.PinByName,
 	},ebpf.MapOptions{
-		PinPath: "/sys/fs/bpf",
+		PinPath: pinPath,
 	})
 	// if err := m.Pin(name); err != nil {
 	// 	return nil, err
