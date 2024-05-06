@@ -322,7 +322,7 @@ static inline void *loadbalance_maglev_select_backend(struct cluster_endpoints *
 	if (index >= MAGLEV_TABLE_SIZE)
 		return NULL;
 	id = map_array_get_32(backend_ids, index, MAGLEV_TABLE_SIZE);
-	BPF_LOG(INFO, CLUSTER, "lb_policy is maglev, select backend id is:%u\n", id);
+	BPF_LOG(INFO, CLUSTER, "lb_policy is maglev, select backend id:%u\n", id);
 	if (id >= KMESH_PER_ENDPOINT_NUM)
 		return NULL;
 

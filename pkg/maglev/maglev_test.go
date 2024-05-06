@@ -168,9 +168,6 @@ func NewMaglevOuterMap(name string, maxEntries int, tableSize uint32, innerMap *
 	},ebpf.MapOptions{
 		PinPath: pinPath,
 	})
-	// if err := m.Pin(name); err != nil {
-	// 	return nil, err
-	// }
 
 	if err != nil {
 		return nil, err
