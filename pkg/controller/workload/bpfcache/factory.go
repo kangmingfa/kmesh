@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 The Kmesh Authors.
+ * Copyright 2024 The Kmesh Authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,36 +12,23 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-
- * Author: LemmyHuang
- * Create: 2021-09-17
  */
 
-#ifndef _ERRNO_H_
-#define _ERRNO_H_
+package bpfcache
 
-#ifndef ENOENT
-#define ENOENT 2 /* No such file or directory */
-#endif
+import (
+	"kmesh.net/kmesh/bpf/kmesh/bpf2go"
+	"kmesh.net/kmesh/pkg/logger"
+)
 
-#ifndef ENOEXEC
-#define ENOEXEC 8 /* Exec format error */
-#endif
+var log = logger.NewLoggerField("workload_bpfcache")
 
-#ifndef EAGAIN
-#define EAGAIN 11 /* Try again */
-#endif
+type Cache struct {
+	bpfMap bpf2go.KmeshCgroupSockWorkloadMaps
+}
 
-#ifndef EBUSY
-#define EBUSY 16 /* Device or resource busy */
-#endif
-
-#ifndef EINVAL
-#define EINVAL 22 /* Invalid argument */
-#endif
-
-#ifndef ENOSPC
-#define ENOSPC 28 /* No space left on device */
-#endif
-
-#endif // _ERRNO_H_
+func NewCache(workloadMap bpf2go.KmeshCgroupSockWorkloadMaps) *Cache {
+	return &Cache{
+		bpfMap: workloadMap,
+	}
+}

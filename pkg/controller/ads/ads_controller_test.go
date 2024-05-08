@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package envoy
+package ads
 
 import (
 	"context"
@@ -31,14 +31,15 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
-	"istio.io/istio/pilot/test/xdstest"
+
+	"kmesh.net/kmesh/pkg/controller/xdstest"
 )
 
 func TestAdsStreamAdsStreamCreateAndSend(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	adsStream := AdsStream{
-		Event: nil,
+	adsStream := Controller{
+		Processor: nil,
 	}
 
 	// create a fake grpc service client
@@ -122,9 +123,7 @@ func TestAdsStreamAdsStreamCreateAndSend(t *testing.T) {
 func TestAdsStream_AdsStreamProcess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	adsStream := AdsStream{
-		Event: NewServiceEvent(),
-	}
+	adsStream := NewController()
 
 	// create a fake grpc service client
 	mockDiscovery := xdstest.NewMockServer(t)
@@ -226,9 +225,9 @@ func TestAdsStream_AdsStreamProcess(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.beforeFunc()
-			err := adsStream.AdsStreamProcess()
+			err := adsStream.HandleAdsStream()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("adsStream.AdsStreamProcess() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("adsStream.HandleAdsStream() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			tt.afterFunc()
