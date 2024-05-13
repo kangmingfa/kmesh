@@ -50,11 +50,6 @@ small that make compile success */
         val;                                                                                                           \
     })
 
-struct bpf_mem_ptr {
-    void *ptr;
-    __u32 size;
-};
-
 #if !ENHANCED_KERNEL
 static inline int bpf__strncmp(char *dst, int n, const char *src)
 {
@@ -158,5 +153,17 @@ static inline void *kmesh_get_ptr_val(const void *ptr)
 
     /* get inner_map_instance value */
     return kmesh_map_lookup_elem(inner_map_instance, &inner_idx);
+}
+uint32_t hash(unsigned char *str, __u32 size)
+{
+    int c;
+    uint32_t hash = 5381;
+    while (size) {
+        c = *str++;
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+        size--;
+    }
+        
+    return hash;
 }
 #endif // _KMESH_COMMON_H_

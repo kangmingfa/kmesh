@@ -362,11 +362,14 @@ int route_config_manager(ctx_buff_t *ctx)
     Route__Route *route = NULL;
     Route__RouteAction *route_act = NULL;
     void *hash_policy_ptr = NULL;
-    // size_t n_hash_policy = 0;
     __u32 i;
     Route__RouteAction__HashPolicy *hash_policy;
     char *header_name = NULL;
     Route__RouteAction__HashPolicy__Header *header;
+    struct bpf_mem_ptr *msg_header = NULL;
+    char *msg_header_v = NULL;
+    __u32 *msg_header_len = NULL;
+    uint32_t lb_hash = 0;
 
     DECLARE_VAR_ADDRESS(ctx, addr);
 
@@ -420,6 +423,14 @@ int route_config_manager(ctx_buff_t *ctx)
     //Todo： when header name is not null, compute a hash value.
     if (header_name != NULL) {
         BPF_LOG(INFO, ROUTER_CONFIG, "Got a header name:%s\n", header_name);
+        msg_header = (struct bpf_mem_ptr *)bpf_get_msg_header_element(header_name);
+        if (msg_header) {
+            msg_header_v = _(msg_header->ptr);
+            BPF_LOG(INFO, ROUTER_CONFIG, "Got a header value:%s\n", msg_header_v);
+            msg_header_len = _(msg_header->size);
+            lb_hash = hash((unsigned char*) msg_header_v, msg_header_len);
+            BPF_LOG(INFO, ROUTER_CONFIG, "Got a lb hash:%u\n", lb_hash);
+        }
     }
     if (!cluster) {
         BPF_LOG(ERR, ROUTER_CONFIG, "failed to get cluster\n");
