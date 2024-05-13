@@ -24,9 +24,9 @@
 #include "endpoint/endpoint.pb-c.h"
 #include "jhash.h"
 
-#define CLUSTER_NAME_MAX_LEN	BPF_DATA_MAX_LEN
-#define MAGLEV_TABLE_SIZE       16381
-#define HASH_INIT4_SEED         0xcafe
+#define CLUSTER_NAME_MAX_LEN BPF_DATA_MAX_LEN
+#define MAGLEV_TABLE_SIZE    16381
+#define HASH_INIT4_SEED      0xcafe
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -37,20 +37,20 @@ struct {
 } map_of_cluster SEC(".maps");
 
 struct inner_of_maglev {
-	__uint(type, BPF_MAP_TYPE_ARRAY);
-	__uint(max_entries, 1);
-	__uint(key_size, sizeof(__u32));
-	__uint(value_size, sizeof(__u32) * MAGLEV_TABLE_SIZE);
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __uint(key_size, sizeof(__u32));
+    __uint(value_size, sizeof(__u32) * MAGLEV_TABLE_SIZE);
 };
 
 struct {
-	__uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);
-	__uint(key_size, CLUSTER_NAME_MAX_LEN);
-	__uint(value_size, sizeof(__u32));
-	__uint(max_entries, MAP_SIZE_OF_CLUSTER);
-	__uint(map_flags, BPF_F_NO_PREALLOC);
-	__array(values, struct inner_of_maglev);
-}outer_of_maglev SEC(".maps");
+    __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);
+    __uint(key_size, CLUSTER_NAME_MAX_LEN);
+    __uint(value_size, sizeof(__u32));
+    __uint(max_entries, MAP_SIZE_OF_CLUSTER);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __array(values, struct inner_of_maglev);
+} outer_of_maglev SEC(".maps");
 
 struct cluster_endpoints {
     __u32 ep_num;
@@ -97,7 +97,7 @@ static inline struct cluster_endpoints *map_lookup_cluster_eps(const char *clust
 
 static inline __u32 *map_lookup_cluster_inner_map(const char *cluster_name)
 {
-	return kmesh_map_lookup_elem(&outer_of_maglev, cluster_name);
+    return kmesh_map_lookup_elem(&outer_of_maglev, cluster_name);
 }
 
 static inline int map_add_cluster_eps(const char *cluster_name, const struct cluster_endpoints *eps)
@@ -261,7 +261,7 @@ static inline void *loadbalance_round_robin(struct cluster_endpoints *eps)
  */
 // static __always_inline __u32 hash_from_tuple_v4(struct bpf_sock * sk)
 // {
-	
+
 // 	BPF_LOG(INFO, CLUSTER, "sk: src_ip is:%x, src_port is:%d\n", sk->src_ip4,sk->src_port);
 // 	BPF_LOG(INFO, CLUSTER, "sk: dst_port is:%d, sk->protocol is: %x\n",sk->dst_port,sk->protocol);
 // 	return jhash_3words(sk->src_ip4,
@@ -269,79 +269,79 @@ static inline void *loadbalance_round_robin(struct cluster_endpoints *eps)
 // 			    sk->protocol, HASH_INIT4_SEED);
 // }
 
-static __always_inline __u32
-map_array_get_32(__u32 *array, __u32 index, const __u32 limit)
+static __always_inline __u32 map_array_get_32(__u32 *array, __u32 index, const __u32 limit)
 {
-	__u32 datum = 0;
+    __u32 datum = 0;
 
-	// if (__builtin_constant_p(index) ||
-	//     !__builtin_constant_p(limit))
-	// 	__throw_build_bug();
+    // if (__builtin_constant_p(index) ||
+    //     !__builtin_constant_p(limit))
+    // 	__throw_build_bug();
 
-	/* LLVM tends to optimize code away that is needed for the verifier to
-	 * understand dynamic map access. Input constraint is that index < limit
-	 * for this util function, so we never fail here, and returned datum is
-	 * always valid.
-	 */
-	asm volatile("%[index] <<= 2\n\t"
-		     "if %[index] > %[limit] goto +1\n\t"
-		     "%[array] += %[index]\n\t"
-		     "%[datum] = *(u32 *)(%[array] + 0)\n\t"
-		     : [datum]"=r"(datum)
-		     : [limit]"i"(limit), [array]"r"(array), [index]"r"(index)
-		     : /* no clobbers */ );
+    /* LLVM tends to optimize code away that is needed for the verifier to
+     * understand dynamic map access. Input constraint is that index < limit
+     * for this util function, so we never fail here, and returned datum is
+     * always valid.
+     */
+    asm volatile("%[index] <<= 2\n\t"
+                 "if %[index] > %[limit] goto +1\n\t"
+                 "%[array] += %[index]\n\t"
+                 "%[datum] = *(u32 *)(%[array] + 0)\n\t"
+                 : [datum] "=r"(datum)
+                 : [limit] "i"(limit), [array] "r"(array), [index] "r"(index)
+                 : /* no clobbers */);
 
-	return datum;
+    return datum;
 }
 
-static inline void *loadbalance_maglev_select_backend(struct cluster_endpoints *eps, char* name,ctx_buff_t *ctx) 
+static inline void *loadbalance_maglev_select_backend(struct cluster_endpoints *eps, char *name, ctx_buff_t *ctx)
 {
-	if (!eps || eps->ep_num == 0)
-		return NULL;
-	
-	__u32 inner_key = 0;
-	__u32 *backend_ids;
-	__u32 index;
-	__u32 id;
-	__u32 *inner_of_maglev;
-	struct bpf_sock_ops *skops;
+    if (!eps || eps->ep_num == 0)
+        return NULL;
 
-	inner_of_maglev = map_lookup_cluster_inner_map(name);
-	if (!inner_of_maglev) {
-		return NULL;
-	}
-	backend_ids = bpf_map_lookup_elem(inner_of_maglev, &inner_key);
-	if (!backend_ids) {
-		return NULL;
-	}
-	index = bpf_get_prandom_u32() % MAGLEV_TABLE_SIZE;
-	if (index >= MAGLEV_TABLE_SIZE)
-		return NULL;
-	id = map_array_get_32(backend_ids, index, MAGLEV_TABLE_SIZE);
-	BPF_LOG(INFO, CLUSTER, "lb_policy is maglev, select backend id:%u\n", id);
-	if (id >= KMESH_PER_ENDPOINT_NUM)
-		return NULL;
+    __u32 inner_key = 0;
+    __u32 *backend_ids;
+    __u32 index;
+    __u32 id;
+    __u32 *inner_of_maglev;
+    struct bpf_sock_ops *skops;
 
-	return (void *)eps->ep_identity[id];
+    inner_of_maglev = map_lookup_cluster_inner_map(name);
+    if (!inner_of_maglev) {
+        return NULL;
+    }
+    backend_ids = bpf_map_lookup_elem(inner_of_maglev, &inner_key);
+    if (!backend_ids) {
+        return NULL;
+    }
+    index = bpf_get_prandom_u32() % MAGLEV_TABLE_SIZE;
+    if (index >= MAGLEV_TABLE_SIZE)
+        return NULL;
+    id = map_array_get_32(backend_ids, index, MAGLEV_TABLE_SIZE);
+    BPF_LOG(INFO, CLUSTER, "lb_policy is maglev, select backend id:%u\n", id);
+    if (id >= KMESH_PER_ENDPOINT_NUM)
+        return NULL;
+
+    return (void *)eps->ep_identity[id];
 }
 
-static inline void *cluster_get_ep_identity_by_lb_policy(struct cluster_endpoints *eps, __u32 lb_policy, char* name,ctx_buff_t *ctx)
+static inline void *
+cluster_get_ep_identity_by_lb_policy(struct cluster_endpoints *eps, __u32 lb_policy, char *name, ctx_buff_t *ctx)
 {
     void *ep_identity = NULL;
 
-	switch (lb_policy) {
-		case CLUSTER__CLUSTER__LB_POLICY__ROUND_ROBIN:
-			ep_identity = loadbalance_round_robin(eps);
-			break;
-		case CLUSTER__CLUSTER__LB_POLICY__MAGLEV:
-			ep_identity = loadbalance_maglev_select_backend(eps, name, ctx);
-			break;
-		default:
-			BPF_LOG(INFO, CLUSTER, "%d lb_policy is unsupport, defaut:ROUND_ROBIN\n", lb_policy);
-			ep_identity = loadbalance_round_robin(eps);
-			break;
-	}
-	return ep_identity;
+    switch (lb_policy) {
+    case CLUSTER__CLUSTER__LB_POLICY__ROUND_ROBIN:
+        ep_identity = loadbalance_round_robin(eps);
+        break;
+    case CLUSTER__CLUSTER__LB_POLICY__MAGLEV:
+        ep_identity = loadbalance_maglev_select_backend(eps, name, ctx);
+        break;
+    default:
+        BPF_LOG(INFO, CLUSTER, "%d lb_policy is unsupport, defaut:ROUND_ROBIN\n", lb_policy);
+        ep_identity = loadbalance_round_robin(eps);
+        break;
+    }
+    return ep_identity;
 }
 
 static inline Core__SocketAddress *cluster_get_ep_sock_addr(const void *ep_identity)
@@ -363,7 +363,8 @@ static inline Core__SocketAddress *cluster_get_ep_sock_addr(const void *ep_ident
     return sock_addr;
 }
 
-static inline int cluster_handle_loadbalance(Cluster__Cluster *cluster, address_t *addr, ctx_buff_t *ctx, const char* cluster_name)
+static inline int
+cluster_handle_loadbalance(Cluster__Cluster *cluster, address_t *addr, ctx_buff_t *ctx, const char *cluster_name)
 {
     char *name = NULL;
     void *ep_identity = NULL;
@@ -382,11 +383,11 @@ static inline int cluster_handle_loadbalance(Cluster__Cluster *cluster, address_
         return -EAGAIN;
     }
 
-	ep_identity = cluster_get_ep_identity_by_lb_policy(eps, cluster->lb_policy, cluster_name,ctx);
-	if (!ep_identity) {
-		BPF_LOG(ERR, CLUSTER, "cluster=\"%s\" handle lb failed, %u\n", name);
-		return -EAGAIN;
-	}
+    ep_identity = cluster_get_ep_identity_by_lb_policy(eps, cluster->lb_policy, cluster_name, ctx);
+    if (!ep_identity) {
+        BPF_LOG(ERR, CLUSTER, "cluster=\"%s\" handle lb failed, %u\n", name);
+        return -EAGAIN;
+    }
 
     sock_addr = cluster_get_ep_sock_addr(ep_identity);
     if (!sock_addr) {
@@ -419,8 +420,8 @@ int cluster_manager(ctx_buff_t *ctx)
     if (cluster == NULL)
         return KMESH_TAIL_CALL_RET(ENOENT);
 
-	ret = cluster_handle_loadbalance(cluster, &addr, ctx, ctx_val->data);
-	return KMESH_TAIL_CALL_RET(ret);
+    ret = cluster_handle_loadbalance(cluster, &addr, ctx, ctx_val->data);
+    return KMESH_TAIL_CALL_RET(ret);
 }
 
 #endif

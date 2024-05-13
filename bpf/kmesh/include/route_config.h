@@ -360,6 +360,13 @@ int route_config_manager(ctx_buff_t *ctx)
     Route__RouteConfiguration *route_config = NULL;
     Route__VirtualHost *virt_host = NULL;
     Route__Route *route = NULL;
+    Route__RouteAction *route_act = NULL;
+    void *hash_policy_ptr = NULL;
+    // size_t n_hash_policy = 0;
+    __u32 i;
+    Route__RouteAction__HashPolicy *hash_policy;
+    char *header_name = NULL;
+    Route__RouteAction__HashPolicy__Header *header;
 
     DECLARE_VAR_ADDRESS(ctx, addr);
 
@@ -388,6 +395,32 @@ int route_config_manager(ctx_buff_t *ctx)
     }
 
     cluster = route_get_cluster(route);
+
+    route_act = kmesh_get_ptr_val(_(route->route));
+    if (route_act) {
+        hash_policy_ptr = kmesh_get_ptr_val(_(route_act->hash_policy));
+    }
+
+#pragma unroll
+    for (i = 0; i < KMESH_PER_HASH_POLICY_NUM; i++) {
+        if (hash_policy_ptr == NULL) {
+            break;
+        }
+        hash_policy = (Route__RouteAction__HashPolicy *)kmesh_get_ptr_val((void *)*((__u64 *)hash_policy_ptr + i));
+        if (!hash_policy)
+            break;
+        if (hash_policy->policy_specifier_case == ROUTE__ROUTE_ACTION__HASH_POLICY__POLICY_SPECIFIER_HEADER) {
+            header = kmesh_get_ptr_val(_(hash_policy->header));
+            if (!header)
+                continue;
+            header_name = kmesh_get_ptr_val(_(header->header_name));
+            break;
+        }
+    }
+    //Todo： when header name is not null, compute a hash value.
+    if (header_name != NULL) {
+        BPF_LOG(INFO, ROUTER_CONFIG, "Got a header name:%s\n", header_name);
+    }
     if (!cluster) {
         BPF_LOG(ERR, ROUTER_CONFIG, "failed to get cluster\n");
         return KMESH_TAIL_CALL_RET(-1);
