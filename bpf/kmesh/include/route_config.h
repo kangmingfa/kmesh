@@ -368,7 +368,7 @@ int route_config_manager(ctx_buff_t *ctx)
     Route__RouteAction__HashPolicy__Header *header;
     struct bpf_mem_ptr *msg_header = NULL;
     char *msg_header_v = NULL;
-    __u32 *msg_header_len = NULL;
+    __u32 msg_header_len = 0;
     uint32_t lb_hash = 0;
 
     DECLARE_VAR_ADDRESS(ctx, addr);
@@ -425,11 +425,23 @@ int route_config_manager(ctx_buff_t *ctx)
         BPF_LOG(INFO, ROUTER_CONFIG, "Got a header name:%s\n", header_name);
         msg_header = (struct bpf_mem_ptr *)bpf_get_msg_header_element(header_name);
         if (msg_header) {
+            __u32 k;
             msg_header_v = _(msg_header->ptr);
-            BPF_LOG(INFO, ROUTER_CONFIG, "Got a header value:%s\n", msg_header_v);
             msg_header_len = _(msg_header->size);
-            lb_hash = hash((unsigned char*) msg_header_v, msg_header_len);
-            BPF_LOG(INFO, ROUTER_CONFIG, "Got a lb hash:%u\n", lb_hash);
+            if (msg_header_len) {
+                BPF_LOG(INFO, ROUTER_CONFIG, "Got a header value len:%u\n", msg_header_len);
+            # pragma unroll
+                for (k = 0; k < KMESH_PER_HASH_POLICY_MSG_HEADER_LEN;k++) { 
+                    if (!msg_header_v || k >= msg_header_len)
+                        break;
+                    BPF_LOG(INFO, ROUTER_CONFIG, "Got a header value v:%u\n", *((char *)msg_header_v + k));
+                }
+            }
+            // char msg_header_cp[KMESH_PER_HASH_POLICY_MSG_HEADER_LEN] = {'\0'};
+            // bpf_strncpy(msg_header_cp, msg_header_len, msg_header_v);
+            // BPF_LOG(INFO, ROUTER_CONFIG, "Got a header value:%s\n", msg_header_cp);
+            // // lb_hash = hash((unsigned char*) msg_header_v, msg_header_len);
+            // BPF_LOG(INFO, ROUTER_CONFIG, "Got a lb hash:%u\n", lb_hash);
         }
     }
     if (!cluster) {

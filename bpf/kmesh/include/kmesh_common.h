@@ -154,16 +154,25 @@ static inline void *kmesh_get_ptr_val(const void *ptr)
     /* get inner_map_instance value */
     return kmesh_map_lookup_elem(inner_map_instance, &inner_idx);
 }
-uint32_t hash(unsigned char *str, __u32 size)
-{
-    int c;
-    uint32_t hash = 5381;
-    while (size) {
-        c = *str++;
-        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-        size--;
-    }
-        
-    return hash;
-}
+// static inline uint32_t hash(unsigned char *str, __u32 size)
+// {
+//     __u32 c;
+//     __u32 i;
+//     uint32_t hash = 5381;
+//     // while (size) {
+//     //     c = *str++;
+//     //     hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+//     //     size--;
+//     // }
+// #pragma unroll
+//     for (i = 0;i < 3; i++) {
+//         if (!str || *str == '0')
+//             break;
+//         c = (__u32)*str;
+//         hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+//         str++;
+//     }
+
+//     return hash;
+// }
 #endif // _KMESH_COMMON_H_
