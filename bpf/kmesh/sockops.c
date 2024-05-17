@@ -71,6 +71,9 @@ int sockops_prog(struct bpf_sock_ops *skops)
     case BPF_SOCK_OPS_TCP_DEFER_CONNECT_CB:
         msg = (struct bpf_mem_ptr *)BPF_CONSTRUCT_PTR(skops->args[0], skops->args[1]);
         (void)sockops_traffic_control(skops, msg);
+        break;
+    case BPF_SOCK_OPS_TCP_CONNECT_CB:
+        break;
     }
     return BPF_OK;
 }

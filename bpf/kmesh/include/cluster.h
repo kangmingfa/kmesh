@@ -100,6 +100,11 @@ static inline __u32 *map_lookup_cluster_inner_map(const char *cluster_name)
     return kmesh_map_lookup_elem(&outer_of_maglev, cluster_name);
 }
 
+static inline __u32 *map_lookup_lb_hash() {
+    int location = 0;
+    return kmesh_map_lookup_elem(&map_of_lb_hash,&location);
+}
+
 static inline int map_add_cluster_eps(const char *cluster_name, const struct cluster_endpoints *eps)
 {
     return kmesh_map_update_elem(&map_of_cluster_eps, cluster_name, eps);
@@ -304,6 +309,8 @@ static inline void *loadbalance_maglev_select_backend(struct cluster_endpoints *
     __u32 id;
     __u32 *inner_of_maglev;
     struct bpf_sock_ops *skops;
+    __u32 *hash_ptr;
+    __u32 hash;
 
     inner_of_maglev = map_lookup_cluster_inner_map(name);
     if (!inner_of_maglev) {
@@ -313,7 +320,14 @@ static inline void *loadbalance_maglev_select_backend(struct cluster_endpoints *
     if (!backend_ids) {
         return NULL;
     }
-    index = bpf_get_prandom_u32() % MAGLEV_TABLE_SIZE;
+    hash_ptr = map_lookup_lb_hash();
+    if (!hash_ptr || *hash_ptr == 0) {
+        hash = bpf_get_prandom_u32();
+    }else {
+        hash = *hash_ptr;
+        BPF_LOG(INFO, CLUSTER, "lb_policy is maglev, got a hash value:%u\n", hash);
+    }
+    index = hash % MAGLEV_TABLE_SIZE;
     if (index >= MAGLEV_TABLE_SIZE)
         return NULL;
     id = map_array_get_32(backend_ids, index, MAGLEV_TABLE_SIZE);
