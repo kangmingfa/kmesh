@@ -24,6 +24,8 @@
 #include "filter.h"
 #include "route_config.h"
 #include "cluster.h"
+#include "tail_call.h"
+#include "kmesh_common.h"
 
 #if KMESH_ENABLE_IPV4
 #if KMESH_ENABLE_HTTP
@@ -57,6 +59,32 @@ static int sockops_traffic_control(struct bpf_sock_ops *skops, struct bpf_mem_pt
     return listener_manager(skops, listener, msg);
 }
 
+static int skops_cluster_manager(struct bpf_sock_ops *skops) {
+    int ret = 0;
+    ctx_buff_t *ctx;
+    /* 1 lookup listener */
+    DECLARE_VAR_ADDRESS(skops, addr);
+#if !OE_23_03
+    addr.port = addr.port >> 16;
+#endif
+    Listener__Listener *listener = map_lookup_listener(&addr);
+
+    if (!listener) {
+        addr.ipv4 = 0;
+        listener = map_lookup_listener(&addr);
+        if (!listener) {
+            /* no match vip/nodeport listener */
+            return 0;
+        }
+    }
+
+    ctx = (struct ctx_buff_t*)skops;
+    BPF_LOG(INFO, SOCKOPS, "maglev walk through there code.\n");
+    BPF_LOG(INFO, SOCKOPS, "skops connect hook src ip:%x, src port:%x\n", bpf_ntohl(skops->local_ip4),skops->local_port);
+    kmesh_tail_call(ctx, KMESH_TAIL_CALL_CLUSTER);
+    return KMESH_TAIL_CALL_RET(ret);
+}
+
 SEC("sockops")
 int sockops_prog(struct bpf_sock_ops *skops)
 {
@@ -73,6 +101,7 @@ int sockops_prog(struct bpf_sock_ops *skops)
         (void)sockops_traffic_control(skops, msg);
         break;
     case BPF_SOCK_OPS_TCP_CONNECT_CB:
+        (void)skops_cluster_manager(skops);
         break;
     }
     return BPF_OK;

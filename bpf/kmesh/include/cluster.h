@@ -411,6 +411,10 @@ cluster_handle_loadbalance(Cluster__Cluster *cluster, address_t *addr, ctx_buff_
 
     BPF_LOG(INFO, CLUSTER, "cluster=\"%s\", loadbalance to addr=[%u:%u]\n", name, sock_addr->ipv4, sock_addr->port);
     SET_CTX_ADDRESS(ctx, sock_addr);
+    struct bpf_sock *sk = ctx->sk;
+    if (sk) {
+        BPF_LOG(INFO, CLUSTER, "changed src_ip: %x, src_port:%d\n",sk->dst_ip4,bpf_ntohs(sk->dst_port));
+    }
     return 0;
 }
 
@@ -421,6 +425,7 @@ int cluster_manager(ctx_buff_t *ctx)
     ctx_key_t ctx_key = {0};
     ctx_val_t *ctx_val = NULL;
     Cluster__Cluster *cluster = NULL;
+    struct bpf_sock * sk = NULL;
 
     DECLARE_VAR_ADDRESS(ctx, addr);
 
@@ -430,10 +435,18 @@ int cluster_manager(ctx_buff_t *ctx)
         return KMESH_TAIL_CALL_RET(ENOENT);
 
     cluster = map_lookup_cluster(ctx_val->data);
-    kmesh_tail_delete_ctx(&ctx_key);
     if (cluster == NULL)
         return KMESH_TAIL_CALL_RET(ENOENT);
-
+    sk = (struct bpf_sock*)ctx->sk;
+    if (!sk)
+        return KMESH_TAIL_CALL_RET(ENOENT);
+    BPF_LOG(INFO, CLUSTER, "src_ip: %x, src_port:%d\n",sk->src_ip4, sk->src_port);
+    if (sk->src_port == 0 && cluster->lb_policy == CLUSTER__CLUSTER__LB_POLICY__MAGLEV) {
+        BPF_LOG(INFO, CLUSTER, "load balance exit in advance\n");
+        return KMESH_TAIL_CALL_RET(EAGAIN);
+    }
+    // BPF_LOG(INFO, CLUSTER, "maglev walk through there code.\n");
+    kmesh_tail_delete_ctx(&ctx_key);
     ret = cluster_handle_loadbalance(cluster, &addr, ctx, ctx_val->data);
     return KMESH_TAIL_CALL_RET(ret);
 }
