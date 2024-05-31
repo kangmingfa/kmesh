@@ -52,7 +52,7 @@ function adapt_include_env {
     fi
 }
 
-dependency_pkg_install
+# dependency_pkg_install
 fix_libbpf_bug
 adapt_low_version_kernel
 adapt_include_env

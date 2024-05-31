@@ -38,6 +38,7 @@ LDFLAGS := "-X google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=w
 			-X kmesh.net/kmesh/pkg/version.gitTreeState=$(GIT_TREESTATE) \
 			-X kmesh.net/kmesh/pkg/version.buildDate=$(BUILD_DATE)"
 ARCH := $(shell uname -m)
+IMAGE := ghcr.io/kmesh-net/kmesh:local
 
 ifeq ($(ARCH),x86_64)
 	DIR := amd64
@@ -145,8 +146,11 @@ uninstall:
 build:
 	./kmesh_compile.sh
 	
-docker: build
-	docker build --build-arg arch=$(DIR) -f build/docker/kmesh.dockerfile -t $(HUB)/$(TARGET):$(TAG) .
+docker:
+	# make build
+	./build.sh -b
+	./build.sh -i
+	docker build --build-arg arch=$(DIR) -f build/docker/kmesh.dockerfile -t $(IMAGE) .
 
 format:
 	./hack/format.sh
