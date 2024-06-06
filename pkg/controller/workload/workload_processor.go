@@ -573,38 +573,20 @@ func (p *Processor) storeServiceData(serviceName string, waypoint *workloadapi.G
 
 func (p *Processor) handleService(service *workloadapi.Service) error {
 	log.Debugf("service resource name: %s/%s", service.Namespace, service.Hostname)
-	var (
-		err error
-		sk  = bpf.ServiceKey{}
-		sv  = bpf.ServiceValue{}
-	)
 	p.ServiceCache.AddOrUpdateService(service)
 	serviceName := service.ResourceName()
 	serviceId := p.hashName.StrToNum(serviceName)
-	sk.ServiceId = serviceId
-	// if service has exist, just need update frontend port info
-	if err = p.bpf.ServiceLookup(&sk, &sv); err == nil {
-		// update: delete then store
-		if err = p.deleteFrontendData(serviceId); err != nil {
-			log.Errorf("deleteFrontendData failed: %s", err)
-			return err
-		}
-		if err = p.storeServiceFrontendData(serviceId, service); err != nil {
-			log.Errorf("storeServiceFrontendData failed, err:%s", err)
-			return err
-		}
-	} else {
-		// store in frontend
-		if err = p.storeServiceFrontendData(serviceId, service); err != nil {
-			log.Errorf("storeServiceFrontendData failed, err:%s", err)
-			return err
-		}
 
-		// get endpoint from ServiceCache, and update service and endpoint map
-		if err = p.storeServiceData(serviceName, service.GetWaypoint(), service.GetPorts()); err != nil {
-			log.Errorf("storeServiceData failed, err:%s", err)
-			return err
-		}
+	// store in frontend
+	if err := p.storeServiceFrontendData(serviceId, service); err != nil {
+		log.Errorf("storeServiceFrontendData failed, err:%s", err)
+		return err
+	}
+
+	// get endpoint from ServiceCache, and update service and endpoint map
+	if err := p.storeServiceData(serviceName, service.GetWaypoint(), service.GetPorts()); err != nil {
+		log.Errorf("storeServiceData failed, err:%s", err)
+		return err
 	}
 	return nil
 }
