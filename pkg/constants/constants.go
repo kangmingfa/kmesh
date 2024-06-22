@@ -30,5 +30,9 @@ const (
 	RootCertPath = "/var/run/secrets/istio/root-cert.pem"
 
 	BPF_LOG_ERR   = 0
+	BPF_LOG_WARN   = 1
+	BPF_LOG_INFO   = 2
 	BPF_LOG_DEBUG = 3
+	BPF_DUMP_SPACE_USERSPACE = 1 << 2
+	BPF_DUMP_SPACE_TRACE_PIPE = 1 << 3
 )
